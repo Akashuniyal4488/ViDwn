@@ -1,1 +1,145 @@
-install ffmpeg in computer using this  {https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-essentials.7z} and also set up using bin file and paste location in environment variable .
+import os
+import re
+import threading
+import subprocess
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+import shutil
+import yt_dlp
+import urllib.request
+
+# Load the application icon
+ICON_PATH = os.path.join(os.getcwd(), r"C:\Users\ASUS\Desktop\ViDwn\ViDwn.ico")
+
+# Function to check if a command is installed
+def is_installed(command):
+    return shutil.which(command) is not None
+
+# Function to install FFmpeg if not present and set it in the environment path
+def install_ffmpeg():
+    if not is_installed("ffmpeg"):
+        print("FFmpeg not found. Installing silently...")
+        ffmpeg_url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+        ffmpeg_zip = "ffmpeg.zip"
+
+        urllib.request.urlretrieve(ffmpeg_url, ffmpeg_zip)
+
+        ffmpeg_path = os.path.join(os.getcwd(), "ffmpeg")
+        os.makedirs(ffmpeg_path, exist_ok=True)
+        subprocess.run(["powershell", "Expand-Archive", "-Path", ffmpeg_zip, "-DestinationPath", ffmpeg_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # Path to the FFmpeg bin directory
+        ffmpeg_bin = os.path.join(ffmpeg_path, "ffmpeg-6.0-essentials_build", "bin")
+
+        # Add FFmpeg to environment variables
+        os.environ["PATH"] += os.pathsep + ffmpeg_bin
+        subprocess.run(f'setx PATH "%PATH%;{ffmpeg_bin}"', shell=True)
+
+        print("FFmpeg installed and added to system PATH successfully.")
+
+# Function to validate URL
+def is_valid_url(url):
+    url_pattern = re.compile(r'^(https?:\/\/)?(www\.)?[\w-]+(\.[\w-]+)+[/#?]?.*$')
+    return url_pattern.match(url)
+
+# Function to select destination folder
+def select_destination():
+    folder_selected = filedialog.askdirectory()
+    if folder_selected:
+        destination_entry.delete(0, tk.END)
+        destination_entry.insert(0, folder_selected)
+
+# Function to handle video download
+def download_video(quality):
+    def progress_hook(d):
+        if d['status'] == 'downloading':
+            downloaded = d.get('downloaded_bytes', 0)
+            total = d.get('total_bytes', d.get('total_bytes_estimate', 1))
+            percent = int(downloaded / total * 100)
+            progress_bar['value'] = percent
+            progress_label.config(text=f"Downloading: {percent}%")
+        elif d['status'] == 'finished':
+            progress_bar['value'] = 100
+            progress_label.config(text="Download Complete!")
+
+    def start_download():
+        video_url = link_entry.get()
+        if not video_url or not is_valid_url(video_url):
+            messagebox.showerror("Error", "Please enter a valid video URL.")
+            return
+        
+        download_path = destination_entry.get().strip()
+        if not download_path:
+            messagebox.showerror("Error", "Please select a destination folder.")
+            return
+
+        quality_map = {
+            "4K Ultra HD": "bestvideo[height<=2160]+bestaudio/best",
+            "1080p Full HD": "bestvideo[height<=1080]+bestaudio/best",
+            "720p HD": "bestvideo[height<=720]+bestaudio/best",
+            "480p": "bestvideo[height<=480]+bestaudio/best",
+            "360p": "bestvideo[height<=360]+bestaudio/best",
+            "Audio Only": "bestaudio/best"
+        }
+
+        ydl_opts = {
+            'format': quality_map[quality],
+            'outtmpl': os.path.join(download_path, '%(title)s.%(ext)s'),
+            'progress_hooks': [progress_hook]
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([video_url])
+        messagebox.showinfo("Success", f"Download completed! Saved to {download_path}.")
+        progress_bar['value'] = 0
+        progress_label.config(text="Ready")
+
+    threading.Thread(target=start_download, daemon=True).start()
+
+# Initialize Tkinter root window
+root = tk.Tk()
+root.title("ViDwn Downloader")
+root.geometry("500x750")
+root.configure(bg="#0d1117")
+
+# Set the application icon
+if os.path.exists(ICON_PATH):
+    root.iconbitmap(ICON_PATH)
+
+style = ttk.Style()
+style.configure("Custom.Horizontal.TProgressbar", troughcolor="#80a2d9", background="#80a2d9", thickness=10)
+
+frame = tk.Frame(root, bg="#80a2d9")
+frame.pack(pady=20)
+
+link_label = tk.Label(frame, text="Paste Video URL:", bg="#80a2d9", fg="white", font=("Helvetica", 14))
+link_label.pack()
+link_entry = tk.Entry(frame, font=("Helvetica", 14), width=35, bd=2, relief="solid")
+link_entry.pack(pady=10)
+
+destination_label = tk.Label(frame, text="Select Destination Folder:", bg="#80a2d9", fg="white", font=("Helvetica", 14))
+destination_label.pack()
+
+destination_frame = tk.Frame(frame)
+destination_frame.pack(pady=5)
+
+destination_entry = tk.Entry(destination_frame, font=("Helvetica", 12), width=30, bd=2, relief="solid")
+destination_entry.pack(side=tk.LEFT, padx=5)
+
+destination_button = tk.Button(destination_frame, text="Browse", bg="#80a2d9", fg="white", font=("Helvetica", 12), command=select_destination)
+destination_button.pack(side=tk.RIGHT)
+
+qualities = ["4K Ultra HD", "1080p Full HD", "720p HD", "480p", "360p", "Audio Only"]
+
+for quality in qualities:
+    btn = tk.Button(frame, text=quality, font=("Helvetica", 14), bg="#80a2d9", fg="white", relief="ridge", width=20, bd=2, command=lambda q=quality: download_video(q))
+    btn.pack(pady=5)
+
+progress_bar = ttk.Progressbar(root, orient="horizontal", length=400, mode="determinate", style="Custom.Horizontal.TProgressbar")
+progress_bar.pack(pady=10)
+
+progress_label = tk.Label(root, text="Ready", bg="#0d1117", fg="white", font=("Helvetica", 12))
+progress_label.pack()
+
+install_ffmpeg()
+root.mainloop()
